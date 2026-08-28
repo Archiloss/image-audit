@@ -51,9 +51,11 @@ button { cursor: pointer; border: none; border-radius: 6px; padding: 6px 14px; f
 .boundary-wrap { background: #fffbe6; border: 1px solid #ffe58f; border-radius: 10px; margin: 14px 16px; padding: 14px; }
 .boundary-wrap h2 { font-size: 14px; margin-bottom: 6px; }
 .boundary-wrap .note { font-size: 12px; color: #666; margin-bottom: 10px; }
-.bcell { display: inline-block; width: 150px; margin: 6px; vertical-align: top; }
+.bcell { display: inline-block; width: 150px; margin: 6px; vertical-align: top; cursor: pointer; position: relative; }
 .bcell img { width: 150px; height: 110px; object-fit: cover; border: 2px solid #faad14; border-radius: 6px; }
+.bcell.bb-bad img { border-color: #ff4d4f; border-width: 3px; }
 .bcell .info { font-size: 11px; color: #666; margin-top: 3px; word-break: break-all; }
+.bcell .bmark { position: absolute; top: 4px; right: 4px; font-size: 10px; font-weight: 700; background: #ff4d4f; color: #fff; padding: 1px 5px; border-radius: 3px; }
 </style>
 </head>
 <body>
@@ -79,9 +81,12 @@ const BCOLORS = ['#1677ff', '#52c41a', '#fa8c16', '#722ed1', '#13c2c2', '#eb2f96
 let state = {};
 let cur = 0;
 let curBatch = {};   // cid -> 当前批号
+let bBad = {};       // boundary uuid -> 误报
 
 try { var t = localStorage.getItem(STORE); if (t) state = JSON.parse(t); } catch(e) {}
 function save() { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch(e) {} }
+try { var t2 = localStorage.getItem(STORE + '_b'); if (t2) bBad = JSON.parse(t2); } catch(e) {}
+function saveB() { try { localStorage.setItem(STORE + '_b', JSON.stringify(bBad)); } catch(e) {} }
 
 function bcolor(n) { return BCOLORS[(n - 1) % BCOLORS.length]; }
 
@@ -140,14 +145,28 @@ function render() {
   bl.innerHTML = '';
   BOUNDARY.forEach(b => {
     const src_sub = b.src === '正常' ? '正常' : '重复';
+    const badCls = bBad[b.u] ? ' bb-bad' : '';
     const cell = document.createElement('div');
-    cell.className = 'bcell';
+    cell.className = 'bcell' + badCls;
+    cell.dataset.u = b.u;
     cell.innerHTML = '<img src="./' + src_sub + '/' + b.u + '.jpg">'
-      + '<div class="info">#' + b.i + ' ' + b.src + ' · 连 ' + b.n_t + ' 张 → 组 ' + b.gids.join(',') + '</div>';
+      + '<div class="info">#' + b.i + ' ' + b.src + ' · 连 ' + b.n_t + ' 张 → 组 ' + b.gids.join(',') + '</div>'
+      + '<div class="bmark" style="display:' + (bBad[b.u] ? 'block' : 'none') + '">误报</div>';
     bl.appendChild(cell);
   });
   updateStats();
   scrollTo(cur);
+}
+
+function toggleBBad(u) {
+  if (bBad[u]) delete bBad[u]; else bBad[u] = true;
+  saveB();
+  const cell = document.querySelector('.bcell[data-u="' + u + '"]');
+  if (cell) {
+    cell.classList.toggle('bb-bad', !!bBad[u]);
+    const mk = cell.querySelector('.bmark');
+    if (mk) mk.style.display = bBad[u] ? 'block' : 'none';
+  }
 }
 
 function updateStats() {
@@ -271,6 +290,11 @@ document.getElementById('list').addEventListener('contextmenu', function(e) {
   }
 });
 
+document.getElementById('boundaryList').addEventListener('click', function(e) {
+  const bcell = e.target.closest('.bcell');
+  if (bcell) toggleBBad(bcell.dataset.u);
+});
+
 document.addEventListener('keydown', function(e) {
   const c = DATA[cur];
   if (!c) return;
@@ -290,17 +314,27 @@ function scrollTo(i) {
 document.getElementById('exportBtn').addEventListener('click', function() {
   const rows = DATA.map(function(c) {
     const st = state[c.id] || {};
-    return { group: c.id, n: c.n, judge: st.j || '', batches: st.batches || {}, bads: (st.bads || []).map(function(ii) { return c.imgs[ii].i; }) };
+    const batches = {};
+    for (let k in (st.batches || {})) {
+      batches[k] = (st.batches[k] || []).map(function(ii) { return { id: c.imgs[ii].i, uuid: c.imgs[ii].u, src: c.imgs[ii].src }; });
+    }
+    return { group: c.id, n: c.n, judge: st.j || '', batches: batches,
+             bads: (st.bads || []).map(function(ii) { return { id: c.imgs[ii].i, uuid: c.imgs[ii].u, src: c.imgs[ii].src }; }) };
   });
-  const blob = new Blob([JSON.stringify(rows, null, 2)], { type: 'application/json' });
+  const bstate = bBad || {};
+  const out = { groups: rows, boundary_bads: Object.keys(bstate).map(function(u) {
+    const b = BOUNDARY.find(x => x.u === u);
+    return { uuid: u, id: b ? b.i : null, src: b ? b.src : '?' };
+  }) };
+  const blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'audit_clique_v3_result.json';
+  a.download = 'audit_result.json';
   a.click();
 });
 
 document.getElementById('resetBtn').addEventListener('click', function() {
-  if (confirm('确认重置全部判定？')) { state = {}; save(); render(); }
+  if (confirm('确认重置全部判定？')) { state = {}; bBad = {}; save(); saveB(); render(); }
 });
 
 render();
