@@ -96,46 +96,38 @@ function saveB() { try { localStorage.setItem(STORE + '_b', JSON.stringify(bBad)
 
 function bcolor(n) { return BCOLORS[(n - 1) % BCOLORS.length]; }
 
-function render() {
-  const list = document.getElementById('list');
-  list.innerHTML = '';
-  DATA.forEach((c, i) => {
-    const el = document.createElement('div');
-    el.className = 'cluster';
-    el.id = 'cl' + i;
-    el.dataset.ci = c.id;
-    const st = state[c.id] || {};
-    const j = st.j || 'skip';
-    el.classList.add('done-' + j);
-    if (!curBatch[c.id]) curBatch[c.id] = 1;
-    let batches = st.batches || {};
-    let bads = st.bads || [];
-    let grid = '';
-    c.imgs.forEach((img, ii) => {
-      let bc = '', cls = '';
-      let inB = null;
-      for (let k in batches) if (batches[k].includes(ii)) inB = k;
-      if (inB) { cls = 'in-batch'; bc = 'style="--bc:' + bcolor(+inB) + '"'; }
-      if (bads.includes(ii)) cls = 'bad';
-      const sCls = img.src === '正常' ? 'normal' : 'repeat';
-      grid += '<div class="cell ' + cls + '" data-ci="' + c.id + '" data-ii="' + ii + '" ' + bc + '>'
-           + '<img src="' + img.url + '" alt="">'
-           + '<span class="s ' + sCls + '">' + img.src + '</span>'
-           + '<span class="d">x' + img.deg + '</span>'
-           + '<span class="b" ' + bc + '>' + (inB ? '批' + inB : '') + '</span>'
-           + '<span class="x">误报</span></div>';
-    });
-    // 批统计
-    let bsum = [];
-    for (let k in batches) bsum.push('批' + k + ':' + batches[k].length);
-    if (bads.length) bsum.push('误报:' + bads.length);
-    const bc2 = bads.length ? '<span class="tag-bad" style="display:inline-block">误报 ' + bads.length + '</span>' : '';
-    let batchbar = '';
-    const maxB = Math.max(curBatch[c.id] || 1, ...Object.keys(batches).map(Number));
-    for (let k = 1; k <= maxB; k++) {
-      batchbar += '<span class="bb' + (curBatch[c.id] === k ? ' sel' : '') + '" data-b="' + k + '" data-ci="' + c.id + '" style="--bc:' + bcolor(k) + '">批' + k + '<span class="bdel" data-b="' + k + '" data-ci="' + c.id + '" title="删除此批">×</span></span>';
-    }
-    el.innerHTML = '<div class="c-head"><span class="title">组 #' + c.id + ' · ' + c.n + ' 张</span>'
+function buildGroupHTML(c, i) {
+  const st = state[c.id] || {};
+  const j = st.j || 'skip';
+  if (!curBatch[c.id]) curBatch[c.id] = 1;
+  let batches = st.batches || {};
+  let bads = st.bads || [];
+  let grid = '';
+  c.imgs.forEach((img, ii) => {
+    let bc = '', cls = '';
+    let inB = null;
+    for (let k in batches) if (batches[k].includes(ii)) inB = k;
+    if (inB) { cls = 'in-batch'; bc = 'style="--bc:' + bcolor(+inB) + '"'; }
+    if (bads.includes(ii)) cls = 'bad';
+    const sCls = img.src === '正常' ? 'normal' : 'repeat';
+    grid += '<div class="cell ' + cls + '" data-ci="' + c.id + '" data-ii="' + ii + '" ' + bc + '>'
+         + '<img src="' + img.url + '" alt="">'
+         + '<span class="s ' + sCls + '">' + img.src + '</span>'
+         + '<span class="d">x' + img.deg + '</span>'
+         + '<span class="b" ' + bc + '>' + (inB ? '批' + inB : '') + '</span>'
+         + '<span class="x">误报</span></div>';
+  });
+  let bsum = [];
+  for (let k in batches) bsum.push('批' + k + ':' + batches[k].length);
+  if (bads.length) bsum.push('误报:' + bads.length);
+  const bc2 = bads.length ? '<span class="tag-bad" style="display:inline-block">误报 ' + bads.length + '</span>' : '';
+  let batchbar = '';
+  const maxB = Math.max(curBatch[c.id] || 1, ...Object.keys(batches).map(Number));
+  for (let k = 1; k <= maxB; k++) {
+    batchbar += '<span class="bb' + (curBatch[c.id] === k ? ' sel' : '') + '" data-b="' + k + '" data-ci="' + c.id + '" style="--bc:' + bcolor(k) + '">批' + k + '<span class="bdel" data-b="' + k + '" data-ci="' + c.id + '" title="删除此批">×</span></span>';
+  }
+  return '<div class="cluster' + (j !== 'skip' ? ' done-' + j : '') + '" id="cl' + i + '" data-ci="' + c.id + '">'
+      + '<div class="c-head"><span class="title">组 #' + c.id + ' · ' + c.n + ' 张</span>'
       + '<span class="tag-n">正常 ' + c.n_normal + '</span><span class="tag-r">重复 ' + c.n_dup + '</span>'
       + bc2 + '<span class="meta">' + (bsum.join(' ') || '未标注') + '</span></div>'
       + '<div class="btns" data-ci="' + c.id + '">'
@@ -144,8 +136,24 @@ function render() {
       + '<button class="ok" data-v="true">✓ 整组正确</button>'
       + '<button class="no" data-v="false">✗ 整组误报</button>'
       + '<button class="skip" data-v="skip">跳过</button></div>'
-      + '<div class="grid">' + grid + '</div>';
-    list.appendChild(el);
+      + '<div class="grid">' + grid + '</div></div>';
+}
+
+function renderGroup(cid) {
+  const idx = DATA.findIndex(x => x.id === cid);
+  if (idx < 0) return;
+  const el = document.getElementById('cl' + idx);
+  if (el) el.outerHTML = buildGroupHTML(DATA[idx], idx);
+}
+
+function render() {
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+  DATA.forEach((c, i) => {
+    const el = document.createElement('div');
+    el.outerHTML = '';
+    el.insertAdjacentHTML('afterbegin', buildGroupHTML(c, i));
+    list.appendChild(el.firstElementChild);
   });
   const bl = document.getElementById('boundaryList');
   bl.innerHTML = '';
@@ -292,7 +300,7 @@ document.getElementById('list').addEventListener('click', function(e) {
     if (!Object.keys(st.batches || {}).length && !(st.bads || []).length) delete state[cid];
     else st.j = 'custom';
     if (curBatch[cid] === bnum) curBatch[cid] = 1;
-    save(); updateStats(); render();
+    save(); updateStats(); renderGroup(cid);
     return;
   }
   if (btn) {
@@ -301,7 +309,7 @@ document.getElementById('list').addEventListener('click', function(e) {
       const st = state[cid] || {};
       const maxB = Math.max(1, ...Object.keys(st.batches || {}).map(Number));
       curBatch[cid] = maxB + 1;
-      render(); return;
+      renderGroup(cid); return;
     }
     setJudgement(cid, btn.dataset.v);
   } else if (bb) {
