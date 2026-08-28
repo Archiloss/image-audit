@@ -38,6 +38,8 @@ button { cursor: pointer; border: none; border-radius: 6px; padding: 6px 14px; f
 .cell.bad .b { display: none; }
 .cell .x { position: absolute; top: 4px; right: 4px; font-size: 10px; font-weight: 700; background: #ff4d4f; color: #fff; padding: 1px 5px; border-radius: 3px; display: none; }
 .cell.bad .x { display: block; }
+.cell.dim img { opacity: .15; filter: grayscale(1); }
+.cell.dim .s, .cell.dim .d, .cell.dim .b { opacity: .3; }
 .btns { margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .btns button.ok { background: #52c41a; color: #fff; }
 .btns button.no { background: #ff4d4f; color: #fff; }
@@ -46,9 +48,12 @@ button { cursor: pointer; border: none; border-radius: 6px; padding: 6px 14px; f
 .btns button.newb { background: #1677ff; color: #fff; }
 .btns .batchbar { display: inline-flex; gap: 4px; align-items: center; }
 .btns .batchbar .bb { background: #e6f4ff; color: #1677ff; padding: 3px 10px; border-radius: 4px; font-size: 12px; position: relative; }
-.btns .batchbar .bb.sel { background: var(--bc); color: #fff; outline: 2px solid #000; }
+.btns .batchbar .bball { background: #f0f0f0; color: #333; padding: 3px 10px; border-radius: 4px; font-size: 12px; cursor: pointer; }
+.btns .batchbar .bball.sel { background: #1677ff; color: #fff; outline: 2px solid #000; }
+.btns .batchbar .bb.selb { background: var(--bc); color: #fff; outline: 2px solid #000; }
+.btns .batchbar .bb.selview { box-shadow: 0 0 0 2px #000 inset; }
 .btns .batchbar .bdel { margin-left: 5px; cursor: pointer; font-weight: 700; color: #ff4d4f; padding: 0 2px; border-radius: 2px; }
-.btns .batchbar .bb.sel .bdel { color: #fff; }
+.btns .batchbar .bb.selb .bdel { color: #fff; }
 .btns .batchbar .bdel:hover { background: #ff4d4f; color: #fff; }
 .hint { font-size: 12px; color: #999; }
 .boundary-wrap { background: #fffbe6; border: 1px solid #ffe58f; border-radius: 10px; margin: 14px 16px; padding: 14px; }
@@ -87,6 +92,7 @@ const BCOLORS = ['#1677ff', '#52c41a', '#fa8c16', '#722ed1', '#13c2c2', '#eb2f96
 let state = {};
 let cur = 0;
 let curBatch = {};   // cid -> 当前批号
+let viewMode = {};   // cid -> 'all' | 批号 (筛选视图)
 let bBad = {};       // boundary uuid -> 误报
 
 try { var t = localStorage.getItem(STORE); if (t) state = JSON.parse(t); } catch(e) {}
@@ -109,6 +115,9 @@ function buildGroupHTML(c, i) {
     for (let k in batches) if (batches[k].includes(ii)) inB = k;
     if (inB) { cls = 'in-batch'; bc = 'style="--bc:' + bcolor(+inB) + '"'; }
     if (bads.includes(ii)) cls = 'bad';
+    // 筛选视图: 非当前批的图置灰
+    const vm = viewMode[c.id];
+    if (vm && vm !== 'all' && !(inB === String(vm))) cls += ' dim';
     const sCls = img.src === '正常' ? 'normal' : 'repeat';
     grid += '<div class="cell ' + cls + '" data-ci="' + c.id + '" data-ii="' + ii + '" ' + bc + '>'
          + '<img src="' + img.url + '" alt="">'
@@ -127,8 +136,9 @@ function buildGroupHTML(c, i) {
   const cb = curBatch[c.id] || 1;
   if (!batchKeys.includes(cb)) batchKeys.push(cb);
   batchKeys.sort((a, b) => a - b);
+  batchbar += '<span class="bball' + ((viewMode[c.id] || 'all') === 'all' ? ' sel' : '') + '" data-ci="' + c.id + '">全部</span>';
   batchKeys.forEach(k => {
-    batchbar += '<span class="bb' + (cb === k ? ' sel' : '') + '" data-b="' + k + '" data-ci="' + c.id + '" style="--bc:' + bcolor(k) + '">批' + k + '<span class="bdel" data-b="' + k + '" data-ci="' + c.id + '" title="删除此批">×</span></span>';
+    batchbar += '<span class="bb' + (cb === k ? ' selb' : '') + (viewMode[c.id] === k ? ' selview' : '') + '" data-b="' + k + '" data-ci="' + c.id + '" style="--bc:' + bcolor(k) + '">批' + k + '<span class="bdel" data-b="' + k + '" data-ci="' + c.id + '" title="删除此批">×</span></span>';
   });
   return '<div class="cluster' + (j !== 'skip' ? ' done-' + j : '') + '" id="cl' + i + '" data-ci="' + c.id + '">'
       + '<div class="c-head"><span class="title">组 #' + c.id + ' · ' + c.n + ' 张</span>'
@@ -295,6 +305,7 @@ document.getElementById('list').addEventListener('click', function(e) {
   const bdel = e.target.closest('.bdel');
   const btn = e.target.closest('button[data-v]');
   const bb = e.target.closest('.bb');
+  const bball = e.target.closest('.bball');
   const cell = e.target.closest('.cell');
   if (bdel) {
     const cid = +bdel.dataset.ci;
@@ -322,9 +333,12 @@ document.getElementById('list').addEventListener('click', function(e) {
   } else if (bb) {
     const cid = +bb.dataset.ci;
     curBatch[cid] = +bb.dataset.b;
-    const bar = bb.parentElement;
-    bar.querySelectorAll('.bb').forEach(x => x.classList.remove('sel'));
-    bb.classList.add('sel');
+    viewMode[cid] = +bb.dataset.b;
+    renderGroup(cid);
+  } else if (bball) {
+    const cid = +bball.dataset.ci;
+    viewMode[cid] = 'all';
+    renderGroup(cid);
   } else if (cell) {
     toggleBatch(+cell.dataset.ci, +cell.dataset.ii);
   }
