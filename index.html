@@ -102,6 +102,20 @@ function saveB() { try { localStorage.setItem(STORE + '_b', JSON.stringify(bBad)
 
 function bcolor(n) { return BCOLORS[(n - 1) % BCOLORS.length]; }
 
+function flashHint(cid, text) {
+  const meta = document.querySelector('.cluster[data-ci="' + cid + '"] .meta');
+  if (!meta) return;
+  const orig = meta.textContent;
+  meta.textContent = text;
+  meta.style.color = '#ff4d4f';
+  meta.style.fontWeight = '700';
+  setTimeout(function() {
+    meta.textContent = orig;
+    meta.style.color = '';
+    meta.style.fontWeight = '';
+  }, 2500);
+}
+
 function buildGroupHTML(c, i) {
   const st = state[c.id] || {};
   const j = st.j || 'skip';
@@ -242,6 +256,15 @@ function toggleBatch(cid, ii) {
   st.batches = st.batches || {};
   st.bads = st.bads || [];
   const b = curBatch[cid] || 1;
+  // 图已在其他批 -> 不移动 (保护原批, 防止误清空)
+  let inOther = null;
+  for (let k in st.batches) {
+    if (k !== String(b) && st.batches[k].includes(ii)) { inOther = k; break; }
+  }
+  if (inOther) {
+    flashHint(cid, '⚠ 该图在批' + inOther + '：先点批' + inOther + '取消它，再点回本批加入');
+    return;
+  }
   const inCur = (st.batches[b] || []).includes(ii);
   // 从所有批移除
   for (let k in st.batches) {
