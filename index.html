@@ -63,6 +63,7 @@ button { cursor: pointer; border: none; border-radius: 6px; padding: 6px 14px; f
   <h1>全连接重复组 v3 - 170 组</h1>
   <div id="progress"><div id="bar"></div></div>
   <div id="stats">0/0</div>
+  <span id="savedHint" style="font-size:13px; font-weight:700; color:#52c41a;"></span>
   <button id="exportBtn">导出结果</button>
   <button id="resetBtn">重置</button>
   <span class="hint">单击图片=加入当前批(组头切换批号) | 右键=误报 | 1整组正确 2整组误报 4跳过 | ←→上下组</span>
@@ -173,6 +174,8 @@ function updateStats() {
   const n = Object.keys(state).length;
   document.getElementById('bar').style.width = (n / DATA.length * 100) + '%';
   document.getElementById('stats').textContent = n + '/' + DATA.length;
+  const hint = document.getElementById('savedHint');
+  if (hint) hint.textContent = n > 0 ? '当前已标注 ' + n + ' 组（已自动保存）' : '尚未标注（记录会自动保存，勿清浏览器缓存）';
 }
 
 function rerenderCell(cid, ii) {
