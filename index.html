@@ -52,6 +52,8 @@ button { cursor: pointer; border: none; border-radius: 6px; padding: 6px 14px; f
 .btns .batchbar .bb { background: #e6f4ff; color: #1677ff; padding: 3px 10px; border-radius: 4px; font-size: 12px; position: relative; }
 .btns .batchbar .bball { background: #f0f0f0; color: #333; padding: 3px 10px; border-radius: 4px; font-size: 12px; cursor: pointer; }
 .btns .batchbar .bball.sel { background: #1677ff; color: #fff; outline: 2px solid #000; }
+.btns .batchbar .bbad { background: #fff1f0; color: #ff4d4f; padding: 3px 10px; border-radius: 4px; font-size: 12px; cursor: pointer; }
+.btns .batchbar .bbad.sel { background: #ff4d4f; color: #fff; outline: 2px solid #000; }
 .btns .batchbar .bb.selb { background: var(--bc); color: #fff; outline: 2px solid #000; }
 .btns .batchbar .bb.selview { box-shadow: 0 0 0 2px #000 inset; }
 .btns .batchbar .bdel { margin-left: 5px; cursor: pointer; font-weight: 700; color: #ff4d4f; padding: 0 2px; border-radius: 2px; }
@@ -131,9 +133,13 @@ function buildGroupHTML(c, i) {
     for (let k in batches) if (batches[k].includes(ii)) inB = k;
     if (inB) { cls = 'in-batch'; bc = 'style="--bc:' + bcolor(+inB) + '"'; }
     if (bads.includes(ii)) cls = 'bad';
-    // 筛选视图: 非当前批的图置灰
+    // 筛选视图: 非当前批的图置灰 (误报筛选: 只看误报)
     const vm = viewMode[c.id];
-    if (vm && vm !== 'all' && !(inB === String(vm))) cls += ' dim';
+    if (vm === 'bad') {
+      if (!bads.includes(ii)) cls += ' dim';
+    } else if (vm && vm !== 'all' && !(inB === String(vm))) {
+      cls += ' dim';
+    }
     const sCls = img.src === '正常' ? 'normal' : 'repeat';
     grid += '<div class="cell ' + cls + '" data-ci="' + c.id + '" data-ii="' + ii + '" ' + bc + '>'
          + '<img src="' + img.url + '" alt="">'
@@ -156,6 +162,9 @@ function buildGroupHTML(c, i) {
   batchKeys.forEach(k => {
     batchbar += '<span class="bb' + (cb === k ? ' selb' : '') + (viewMode[c.id] === k ? ' selview' : '') + '" data-b="' + k + '" data-ci="' + c.id + '" style="--bc:' + bcolor(k) + '">批' + k + '<span class="bdel" data-b="' + k + '" data-ci="' + c.id + '" title="删除此批">×</span></span>';
   });
+  if (bads.length) {
+    batchbar += '<span class="bbad' + (viewMode[c.id] === 'bad' ? ' sel' : '') + '" data-ci="' + c.id + '">误报' + bads.length + '</span>';
+  }
   return '<div class="cluster' + (j !== 'skip' ? ' done-' + j : '') + '" id="cl' + i + '" data-ci="' + c.id + '">'
       + '<div class="c-head"><span class="title">组 #' + c.id + ' · ' + c.n + ' 张</span>'
       + '<span class="tag-n">正常 ' + c.n_normal + '</span><span class="tag-r">重复 ' + c.n_dup + '</span>'
@@ -174,6 +183,29 @@ function renderGroup(cid) {
   if (idx < 0) return;
   const el = document.getElementById('cl' + idx);
   if (el) el.outerHTML = buildGroupHTML(DATA[idx], idx);
+}
+
+// 只重建批号按钮条 (不重建 grid/cells, 保持 cell 引用有效)
+function renderBatchbar(cid) {
+  const bar = document.querySelector('.btns[data-ci="' + cid + '"] .batchbar');
+  if (!bar) return;
+  const c = DATA.find(x => x.id === cid);
+  if (!c) return;
+  const st = state[cid] || {};
+  const batches = st.batches || {};
+  const bads = st.bads || [];
+  const cb = curBatch[cid] || 1;
+  let batchKeys = Object.keys(batches).map(Number).sort((a, b) => a - b);
+  if (!batchKeys.includes(cb)) batchKeys.push(cb);
+  batchKeys.sort((a, b) => a - b);
+  let html = '<span class="bball' + ((viewMode[cid] || 'all') === 'all' ? ' sel' : '') + '" data-ci="' + cid + '">全部</span>';
+  batchKeys.forEach(k => {
+    html += '<span class="bb' + (cb === k ? ' selb' : '') + (viewMode[cid] === k ? ' selview' : '') + '" data-b="' + k + '" data-ci="' + cid + '" style="--bc:' + bcolor(k) + '">批' + k + '<span class="bdel" data-b="' + k + '" data-ci="' + cid + '" title="删除此批">×</span></span>';
+  });
+  if (bads.length) {
+    html += '<span class="bbad' + (viewMode[cid] === 'bad' ? ' sel' : '') + '" data-ci="' + cid + '">误报' + bads.length + '</span>';
+  }
+  bar.innerHTML = html;
 }
 
 function render() {
@@ -292,6 +324,7 @@ function toggleBatch(cid, ii) {
   }
   save();
   rerenderCell(cid, ii);
+  renderBatchbar(cid);
   updateStats();
 }
 
@@ -314,6 +347,7 @@ function toggleBad(cid, ii) {
   }
   save();
   rerenderCell(cid, ii);
+  renderBatchbar(cid);
   updateStats();
 }
 
@@ -331,6 +365,7 @@ document.getElementById('list').addEventListener('click', function(e) {
   const btn = e.target.closest('button[data-v]');
   const bb = e.target.closest('.bb');
   const bball = e.target.closest('.bball');
+  const bbad = e.target.closest('.bbad');
   const cell = e.target.closest('.cell');
   if (bdel) {
     const cid = +bdel.dataset.ci;
@@ -363,6 +398,10 @@ document.getElementById('list').addEventListener('click', function(e) {
   } else if (bball) {
     const cid = +bball.dataset.ci;
     viewMode[cid] = 'all';
+    renderGroup(cid);
+  } else if (bbad) {
+    const cid = +bbad.dataset.ci;
+    viewMode[cid] = 'bad';
     renderGroup(cid);
   } else if (cell) {
     toggleBatch(+cell.dataset.ci, +cell.dataset.ii);
