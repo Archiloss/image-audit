@@ -122,10 +122,14 @@ function buildGroupHTML(c, i) {
   if (bads.length) bsum.push('误报:' + bads.length);
   const bc2 = bads.length ? '<span class="tag-bad" style="display:inline-block">误报 ' + bads.length + '</span>' : '';
   let batchbar = '';
-  const maxB = Math.max(curBatch[c.id] || 1, ...Object.keys(batches).map(Number));
-  for (let k = 1; k <= maxB; k++) {
-    batchbar += '<span class="bb' + (curBatch[c.id] === k ? ' sel' : '') + '" data-b="' + k + '" data-ci="' + c.id + '" style="--bc:' + bcolor(k) + '">批' + k + '<span class="bdel" data-b="' + k + '" data-ci="' + c.id + '" title="删除此批">×</span></span>';
-  }
+  // 只显示"有图的批 + 当前批(可能为空, 用户正在加图)"——空批不显示按钮
+  let batchKeys = Object.keys(batches).map(Number).sort((a, b) => a - b);
+  const cb = curBatch[c.id] || 1;
+  if (!batchKeys.includes(cb)) batchKeys.push(cb);
+  batchKeys.sort((a, b) => a - b);
+  batchKeys.forEach(k => {
+    batchbar += '<span class="bb' + (cb === k ? ' sel' : '') + '" data-b="' + k + '" data-ci="' + c.id + '" style="--bc:' + bcolor(k) + '">批' + k + '<span class="bdel" data-b="' + k + '" data-ci="' + c.id + '" title="删除此批">×</span></span>';
+  });
   return '<div class="cluster' + (j !== 'skip' ? ' done-' + j : '') + '" id="cl' + i + '" data-ci="' + c.id + '">'
       + '<div class="c-head"><span class="title">组 #' + c.id + ' · ' + c.n + ' 张</span>'
       + '<span class="tag-n">正常 ' + c.n_normal + '</span><span class="tag-r">重复 ' + c.n_dup + '</span>'
@@ -299,7 +303,10 @@ document.getElementById('list').addEventListener('click', function(e) {
     if (st.batches) delete st.batches[bnum];
     if (!Object.keys(st.batches || {}).length && !(st.bads || []).length) delete state[cid];
     else st.j = 'custom';
-    if (curBatch[cid] === bnum) curBatch[cid] = 1;
+    if (curBatch[cid] === bnum) {
+      const keys = Object.keys((state[cid] || {}).batches || {}).map(Number);
+      curBatch[cid] = keys.length ? Math.max(...keys) : 1;
+    }
     save(); updateStats(); renderGroup(cid);
     return;
   }
@@ -307,7 +314,7 @@ document.getElementById('list').addEventListener('click', function(e) {
     const cid = +btn.parentElement.dataset.ci;
     if (btn.dataset.v === 'newb') {
       const st = state[cid] || {};
-      const maxB = Math.max(1, ...Object.keys(st.batches || {}).map(Number));
+      const maxB = Math.max(curBatch[cid] || 1, ...Object.keys(st.batches || {}).map(Number));
       curBatch[cid] = maxB + 1;
       renderGroup(cid); return;
     }
