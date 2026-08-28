@@ -66,7 +66,9 @@ button { cursor: pointer; border: none; border-radius: 6px; padding: 6px 14px; f
   <span id="savedHint" style="font-size:13px; font-weight:700; color:#52c41a;"></span>
   <button id="exportBtn">导出结果</button>
   <button id="resetBtn">重置</button>
-  <span class="hint">单击图片=加入当前批(组头切换批号) | 右键=误报 | 1整组正确 2整组误报 4跳过 | ←→上下组</span>
+  <button id="prevBtn" style="background:#f0f0f0; color:#333;">↑ 上一组</button>
+  <button id="nextBtn" style="background:#1677ff; color:#fff;">↓ 下一组</button>
+  <span class="hint">单击图片=加入当前批(组头切换批号) | 右键=误报 | 1整组正确 2整组误报 4跳过</span>
 </div>
 <div id="list"></div>
 <div class="boundary-wrap">
@@ -133,13 +135,13 @@ function render() {
     el.innerHTML = '<div class="c-head"><span class="title">组 #' + c.id + ' · ' + c.n + ' 张</span>'
       + '<span class="tag-n">正常 ' + c.n_normal + '</span><span class="tag-r">重复 ' + c.n_dup + '</span>'
       + bc2 + '<span class="meta">' + (bsum.join(' ') || '未标注') + '</span></div>'
-      + '<div class="grid">' + grid + '</div>'
       + '<div class="btns" data-ci="' + c.id + '">'
       + '<span class="batchbar">' + batchbar + '</span>'
       + '<button class="newb" data-v="newb">＋ 新一批</button>'
       + '<button class="ok" data-v="true">✓ 整组正确</button>'
       + '<button class="no" data-v="false">✗ 整组误报</button>'
-      + '<button class="skip" data-v="skip">跳过</button></div>';
+      + '<button class="skip" data-v="skip">跳过</button></div>'
+      + '<div class="grid">' + grid + '</div>';
     list.appendChild(el);
   });
   const bl = document.getElementById('boundaryList');
@@ -297,6 +299,9 @@ document.getElementById('boundaryList').addEventListener('click', function(e) {
   const bcell = e.target.closest('.bcell');
   if (bcell) toggleBBad(bcell.dataset.u);
 });
+
+document.getElementById('prevBtn').addEventListener('click', function() { cur--; scrollTo(cur); });
+document.getElementById('nextBtn').addEventListener('click', function() { cur++; scrollTo(cur); });
 
 document.addEventListener('keydown', function(e) {
   const c = DATA[cur];
