@@ -207,8 +207,8 @@ function rerenderCell(cid, ii) {
   const el = document.querySelector('.cluster[data-ci="' + cid + '"]');
   if (el) {
     const st2 = state[cid] || {};
-    const j = st2.j || 'skip';
-    el.className = 'cluster done-' + j;
+    if (!st2.j || st2.j === 'skip') el.className = 'cluster';
+    else el.className = 'cluster done-' + st2.j;
   }
 }
 
@@ -217,6 +217,7 @@ function toggleBatch(cid, ii) {
   st.batches = st.batches || {};
   st.bads = st.bads || [];
   const b = curBatch[cid] || 1;
+  const inCur = (st.batches[b] || []).includes(ii);
   // 从所有批移除
   for (let k in st.batches) {
     const arr = st.batches[k];
@@ -227,13 +228,21 @@ function toggleBatch(cid, ii) {
   // 从误报移除
   const pb = st.bads.indexOf(ii);
   if (pb >= 0) st.bads.splice(pb, 1);
-  // 加入当前批
-  st.batches[b] = st.batches[b] || [];
-  if (!st.batches[b].includes(ii)) st.batches[b].push(ii);
+  if (!inCur) {
+    // 不在当前批 -> 加入
+    st.batches[b] = st.batches[b] || [];
+    st.batches[b].push(ii);
+  }
+  // inCur=true -> 已移除, 不重新加入 (即取消选中)
   st.j = 'custom';
   state[cid] = st;
+  // 该组已无任何标注 -> 回到未审状态
+  if (!Object.keys(st.batches).length && !st.bads.length) {
+    delete state[cid];
+  }
   save();
   rerenderCell(cid, ii);
+  updateStats();
 }
 
 function toggleBad(cid, ii) {
@@ -250,8 +259,12 @@ function toggleBad(cid, ii) {
   if (pb >= 0) st.bads.splice(pb, 1); else st.bads.push(ii);
   st.j = 'custom';
   state[cid] = st;
+  if (!Object.keys(st.batches).length && !st.bads.length) {
+    delete state[cid];
+  }
   save();
   rerenderCell(cid, ii);
+  updateStats();
 }
 
 function setJudgement(cid, j) {
